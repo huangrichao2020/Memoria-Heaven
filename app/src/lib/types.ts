@@ -122,7 +122,7 @@ export interface MapData {
 }
 
 export interface LLMConfig {
-  provider: 'ollama' | 'openai' | 'anthropic';
+  provider: 'ollama' | 'groq' | 'openai' | 'anthropic';
   model?: string;
   apiKey?: string;
   baseUrl?: string;

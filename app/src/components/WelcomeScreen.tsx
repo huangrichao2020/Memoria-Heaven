@@ -20,7 +20,7 @@ export function WelcomeScreen() {
   };
 
   const handleQuickSetup = async () => {
-    await setLLMConfig({ provider: 'ollama', model: 'qwen2.5:7b' });
+    await setLLMConfig({ provider: 'groq', model: 'llama-3.1-8b-instant' });
     setStep(1);
   };
 

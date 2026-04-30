@@ -366,7 +366,8 @@ function LLMConfigPanel() {
       <div style={styles.sectionTitle}>LLM 配置</div>
 
       <label style={styles.label}>提供商</label>
-      <select style={styles.select} value={provider} onChange={(e) => setProvider(e.target.value as 'ollama' | 'openai' | 'anthropic')}>
+      <select style={styles.select} value={provider} onChange={(e) => setProvider(e.target.value as 'ollama' | 'groq' | 'openai' | 'anthropic')}>
+        <option value="groq">Groq (免费推荐)</option>
         <option value="ollama">Ollama (本地)</option>
         <option value="openai">OpenAI</option>
         <option value="anthropic">Anthropic / OpenAI 兼容</option>
@@ -377,8 +378,20 @@ function LLMConfigPanel() {
         style={styles.input}
         value={model}
         onChange={(e) => setModel(e.target.value)}
-        placeholder={provider === 'ollama' ? 'qwen2.5:7b' : 'gpt-4o-mini'}
+        placeholder={
+          provider === 'ollama' ? 'qwen2.5:7b' :
+          provider === 'groq' ? 'llama-3.1-8b-instant' :
+          'gpt-4o-mini'
+        }
       />
+
+      {provider === 'groq' && (
+        <div style={{ color: '#4ade80', fontSize: 12, marginBottom: 8, lineHeight: 1.5 }}>
+          免费额度：30请求/分钟，14,400请求/天<br />
+          推荐模型：llama-3.1-8b-instant（快速）<br />
+          中文场景：qwen3-32b（更智能）
+        </div>
+      )}
 
       {provider !== 'ollama' && (
         <>
@@ -388,20 +401,34 @@ function LLMConfigPanel() {
             type="password"
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
-            placeholder="sk-..."
+            placeholder={provider === 'groq' ? 'gsk_...' : 'sk-...'}
           />
+          {provider === 'groq' && (
+            <div style={{ color: '#666', fontSize: 11, marginBottom: 8 }}>
+              免费获取：console.groq.com/keys
+            </div>
+          )}
         </>
       )}
 
       <label style={styles.label}>
-        {provider === 'ollama' ? 'Ollama 地址' : 'API Base URL'}
+        {provider === 'ollama' ? 'Ollama 地址' : provider === 'groq' ? 'Worker 代理地址（可选）' : 'API Base URL'}
       </label>
       <input
         style={styles.input}
         value={baseUrl}
         onChange={(e) => setBaseUrl(e.target.value)}
-        placeholder={provider === 'ollama' ? 'http://localhost:11434' : 'https://api.openai.com/v1'}
+        placeholder={
+          provider === 'ollama' ? 'http://localhost:11434' :
+          provider === 'groq' ? 'https://你的Worker.workers.dev/api' :
+          'https://api.openai.com/v1'
+        }
       />
+      {provider === 'groq' && !baseUrl && (
+        <div style={{ color: '#666', fontSize: 11, marginBottom: 8 }}>
+          留空则直连 Groq API，填写 Worker 地址可隐藏 Key
+        </div>
+      )}
 
       <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
         <button style={styles.confirmBtn} onClick={handleSave}>保存</button>
@@ -411,10 +438,29 @@ function LLMConfigPanel() {
       {status && <div style={{ color: '#4ade80', marginTop: 8, fontSize: 13 }}>{status}</div>}
 
       <div style={{ color: '#666', fontSize: 12, marginTop: 16, lineHeight: 1.6 }}>
-        <strong>本地运行推荐：</strong><br />
-        1. 安装 Ollama: ollama.com<br />
-        2. 下载模型: ollama pull qwen2.5:7b<br />
-        3. 默认地址: localhost:11434
+        {provider === 'groq' ? (
+          <>
+            <strong>Groq 免费配置：</strong><br />
+            1. 注册 console.groq.com<br />
+            2. 创建 API Key<br />
+            3. 粘贴到上方 API Key 输入框<br />
+            4. 推荐模型: llama-3.1-8b-instant
+          </>
+        ) : provider === 'ollama' ? (
+          <>
+            <strong>Ollama 本地配置：</strong><br />
+            1. 安装 Ollama: ollama.com<br />
+            2. 下载模型: ollama pull qwen2.5:7b<br />
+            3. 默认地址: localhost:11434
+          </>
+        ) : (
+          <>
+            <strong>OpenAI 兼容配置：</strong><br />
+            1. 填写 API Key<br />
+            2. 填写 API Base URL<br />
+            3. 选择模型名称
+          </>
+        )}
       </div>
     </div>
   );
