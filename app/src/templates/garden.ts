@@ -1,5 +1,5 @@
 // ============================================================
-// Garden Template - Default memorial map
+// Garden Template - 记忆花园模板（增强版）
 // ============================================================
 import type { MapData, Block } from '../lib/types';
 
@@ -47,13 +47,15 @@ export function createGardenTemplate(name: string): MapData {
     for (let z = 8; z <= 12; z++) {
       const dist = Math.sqrt((x - 24) ** 2 + (z - 10) ** 2);
       if (dist <= 2.5) {
-        // Remove grass at pond location
-        const idx = blocks.findIndex(b => b.position.x === x && b.position.y === 0 && b.position.z === z);
+        const idx = blocks.findIndex((b) => b.position.x === x && b.position.y === 0 && b.position.z === z);
         if (idx !== -1) blocks.splice(idx, 1);
         blocks.push({ position: { x, y: 0, z }, type: 'water' });
       }
     }
   }
+
+  // 许愿池（喷泉）
+  blocks.push({ position: { x: 24, y: 1, z: 10 }, type: 'fountain', metadata: { interactive: true } });
 
   // Stone path
   for (let z = 0; z < D; z++) {
@@ -68,16 +70,40 @@ export function createGardenTemplate(name: string): MapData {
     blocks.push({ position: { x: cx, y: 1, z: cz }, type: 'candle' });
   });
 
+  // 新增：长椅
+  blocks.push({ position: { x: 12, y: 1, z: 16 }, type: 'bench' });
+  blocks.push({ position: { x: 20, y: 1, z: 16 }, type: 'bench' });
+
+  // 新增：拱门入口
+  blocks.push({ position: { x: 16, y: 1, z: 31 }, type: 'arch' });
+  blocks.push({ position: { x: 16, y: 2, z: 31 }, type: 'arch' });
+  blocks.push({ position: { x: 16, y: 3, z: 31 }, type: 'arch' });
+
+  // 新增：灯笼
+  blocks.push({ position: { x: 14, y: 1, z: 31 }, type: 'lantern' });
+  blocks.push({ position: { x: 18, y: 1, z: 31 }, type: 'lantern' });
+
+  // 新增：蝴蝶装饰
+  blocks.push({ position: { x: 8, y: 2, z: 16 }, type: 'butterfly' });
+  blocks.push({ position: { x: 24, y: 2, z: 16 }, type: 'butterfly' });
+
+  // 新增：苔藓
+  blocks.push({ position: { x: 3, y: 1, z: 3 }, type: 'moss' });
+  blocks.push({ position: { x: 28, y: 1, z: 28 }, type: 'moss' });
+
   return {
     id: `map-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     version: '1.0.0',
     createdAt: Date.now(),
     updatedAt: Date.now(),
     name,
+    templateId: 'garden',
+    season: 'spring',
     dimensions: { width: W, height: H, depth: D },
     blocks,
     inhabitants: [],
     neighbors: [],
     isPublic: true,
+    messages: [],
   };
 }

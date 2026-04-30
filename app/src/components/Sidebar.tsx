@@ -1,22 +1,45 @@
 // ============================================================
 // Sidebar - Map list, editor toolbar, inhabitant management
+// 增强版：模板选择、方块分类、删除功能、情绪显示
 // ============================================================
 import { useState } from 'react';
 import { useStore } from '../lib/store';
 import type { BlockType, Inhabitant } from '../lib/types';
 import { BLOCK_COLORS } from '../lib/types';
+import { TEMPLATES } from '../templates';
+import { MOOD_EMOJI, MOOD_LABELS } from '../lib/mood';
 
-const EDITABLE_BLOCKS: { type: BlockType; label: string; icon: string }[] = [
-  { type: 'grass', label: '草地', icon: '🌿' },
-  { type: 'stone', label: '石头', icon: '🪨' },
-  { type: 'wood', label: '木头', icon: '🪵' },
-  { type: 'flower', label: '花', icon: '🌸' },
-  { type: 'water', label: '水', icon: '💧' },
-  { type: 'memorial_stone', label: '纪念碑', icon: '🗿' },
-  { type: 'sand', label: '沙子', icon: '🏖️' },
-  { type: 'leaves', label: '树叶', icon: '🍃' },
-  { type: 'candle', label: '蜡烛', icon: '🕯️' },
-];
+// 方块分类
+const BLOCK_CATEGORIES = {
+  '地面': [
+    { type: 'grass' as BlockType, label: '草地', icon: '🌿' },
+    { type: 'stone' as BlockType, label: '石头', icon: '🪨' },
+    { type: 'sand' as BlockType, label: '沙子', icon: '🏖️' },
+    { type: 'moss' as BlockType, label: '苔藓', icon: '🍀' },
+  ],
+  '植物': [
+    { type: 'wood' as BlockType, label: '木头', icon: '🪵' },
+    { type: 'leaves' as BlockType, label: '树叶', icon: '🍃' },
+    { type: 'flower' as BlockType, label: '花', icon: '🌸' },
+  ],
+  '水': [
+    { type: 'water' as BlockType, label: '水', icon: '💧' },
+    { type: 'fountain' as BlockType, label: '喷泉', icon: '⛲' },
+  ],
+  '纪念': [
+    { type: 'memorial_stone' as BlockType, label: '纪念碑', icon: '🗿' },
+    { type: 'candle' as BlockType, label: '蜡烛', icon: '🕯️' },
+    { type: 'lantern' as BlockType, label: '灯笼', icon: '🏮' },
+    { type: 'book' as BlockType, label: '记忆之书', icon: '📖' },
+  ],
+  '装饰': [
+    { type: 'bench' as BlockType, label: '长椅', icon: '💺' },
+    { type: 'arch' as BlockType, label: '拱门', icon: '🏛️' },
+    { type: 'butterfly' as BlockType, label: '蝴蝶', icon: '🦋' },
+    { type: 'crystal' as BlockType, label: '水晶', icon: '💎' },
+    { type: 'portal' as BlockType, label: '传送门', icon: '🌀' },
+  ],
+};
 
 export function Sidebar() {
   const maps = useStore((s) => s.maps);
@@ -28,17 +51,28 @@ export function Sidebar() {
   const setEditorMode = useStore((s) => s.setEditorMode);
   const setSelectedBlock = useStore((s) => s.setSelectedBlock);
   const addInhabitant = useStore((s) => s.addInhabitant);
+  const deleteMap = useStore((s) => s.deleteMap);
+  const removeInhabitant = useStore((s) => s.removeInhabitant);
+  const activeAgent = useStore((s) => s.activeAgent);
 
   const [showCreate, setShowCreate] = useState(false);
   const [showAddInhabitant, setShowAddInhabitant] = useState(false);
   const [mapName, setMapName] = useState('');
+  const [selectedTemplate, setSelectedTemplate] = useState('garden');
   const [tab, setTab] = useState<'maps' | 'edit' | 'settings'>('maps');
+  const [blockCategory, setBlockCategory] = useState('地面');
 
   const handleCreateMap = async () => {
     if (!mapName.trim()) return;
-    await createMap(mapName.trim());
+    await createMap(mapName.trim(), selectedTemplate);
     setMapName('');
     setShowCreate(false);
+  };
+
+  const handleDeleteMap = async (mapId: string) => {
+    if (confirm('确定要删除这个地图吗？')) {
+      await deleteMap(mapId);
+    }
   };
 
   const handleAddInhabitant = async (data: { name: string; description: string; personality: string; memories: string[] }) => {
@@ -49,7 +83,7 @@ export function Sidebar() {
       type: 'human',
       persona: {
         description: data.description,
-        personality: data.personality.split(/[,，、]/).map(s => s.trim()).filter(Boolean),
+        personality: data.personality.split(/[,，、]/).map((s) => s.trim()).filter(Boolean),
         memories: data.memories.filter(Boolean).map((content, i) => ({
           id: `mem-${Date.now()}-${i}`,
           content,
@@ -64,6 +98,9 @@ export function Sidebar() {
     setShowAddInhabitant(false);
   };
 
+  // 获取当前活跃 agent 的情绪
+  const currentMood = activeAgent?.getMood();
+
   return (
     <div style={styles.sidebar}>
       {/* Logo */}
@@ -71,6 +108,22 @@ export function Sidebar() {
         <span style={{ fontSize: 24 }}>✦</span>
         <span style={{ fontWeight: 700, fontSize: 16 }}>Memoria Heaven</span>
       </div>
+
+      {/* 情绪状态显示 */}
+      {currentMood && (
+        <div style={styles.moodBar}>
+          <span style={{ fontSize: 16 }}>{MOOD_EMOJI[currentMood.primary]}</span>
+          <span style={{ color: '#aaa', fontSize: 12 }}>{MOOD_LABELS[currentMood.primary]}</span>
+          <div style={styles.moodBarInner}>
+            <div style={{ ...styles.moodBarFill, width: `${currentMood.energy}%`, background: '#6366f1' }} />
+          </div>
+          <span style={{ color: '#666', fontSize: 10 }}>能量</span>
+          <div style={styles.moodBarInner}>
+            <div style={{ ...styles.moodBarFill, width: `${currentMood.warmth}%`, background: '#f472b6' }} />
+          </div>
+          <span style={{ color: '#666', fontSize: 10 }}>温暖</span>
+        </div>
+      )}
 
       {/* Tabs */}
       <div style={styles.tabs}>
@@ -101,6 +154,25 @@ export function Sidebar() {
                 onKeyDown={(e) => e.key === 'Enter' && handleCreateMap()}
                 autoFocus
               />
+
+              {/* 模板选择 */}
+              <label style={styles.label}>选择模板</label>
+              <div style={styles.templateGrid}>
+                {TEMPLATES.map((t) => (
+                  <button
+                    key={t.id}
+                    style={{
+                      ...styles.templateBtn,
+                      ...(selectedTemplate === t.id ? styles.templateBtnActive : {}),
+                    }}
+                    onClick={() => setSelectedTemplate(t.id)}
+                  >
+                    <span style={{ fontSize: 20 }}>{t.icon}</span>
+                    <span style={{ fontSize: 11, color: '#aaa' }}>{t.name}</span>
+                  </button>
+                ))}
+              </div>
+
               <div style={{ display: 'flex', gap: 8 }}>
                 <button style={styles.confirmBtn} onClick={handleCreateMap}>创建</button>
                 <button style={styles.cancelBtn} onClick={() => setShowCreate(false)}>取消</button>
@@ -121,11 +193,23 @@ export function Sidebar() {
                   ...styles.mapItem,
                   ...(currentMap?.id === m.id ? styles.mapItemActive : {}),
                 }}
-                onClick={() => selectMap(m.id)}
               >
-                <div style={styles.mapName}>{m.name}</div>
-                <div style={styles.mapMeta}>
-                  {m.blocks.length} 方块 · {m.inhabitants.length} 生命
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div onClick={() => selectMap(m.id)} style={{ flex: 1, cursor: 'pointer' }}>
+                    <div style={styles.mapName}>
+                      {TEMPLATES.find((t) => t.id === m.templateId)?.icon || '🗺️'} {m.name}
+                    </div>
+                    <div style={styles.mapMeta}>
+                      {m.blocks.length} 方块 · {m.inhabitants.length} 生命 · {m.messages.length} 留言
+                    </div>
+                  </div>
+                  <button
+                    style={styles.deleteBtn}
+                    onClick={(e) => { e.stopPropagation(); handleDeleteMap(m.id); }}
+                    title="删除地图"
+                  >
+                    ✕
+                  </button>
                 </div>
               </div>
             ))}
@@ -138,7 +222,17 @@ export function Sidebar() {
               {currentMap.inhabitants.map((inh) => (
                 <div key={inh.id} style={styles.inhabitantItem}>
                   <span>{inh.type === 'pet' ? '🐾' : '👤'}</span>
-                  <span>{inh.name}</span>
+                  <span style={{ flex: 1 }}>{inh.name}</span>
+                  {inh.mood && (
+                    <span style={{ fontSize: 14 }}>{MOOD_EMOJI[inh.mood.primary]}</span>
+                  )}
+                  <button
+                    style={styles.deleteBtn}
+                    onClick={() => removeInhabitant(currentMap.id, inh.id)}
+                    title="删除"
+                  >
+                    ✕
+                  </button>
                 </div>
               ))}
               <button
@@ -173,9 +267,24 @@ export function Sidebar() {
 
           {editorMode === 'edit' && (
             <>
-              <div style={styles.sectionTitle}>方块</div>
+              {/* 方块分类标签 */}
+              <div style={styles.categoryTabs}>
+                {Object.keys(BLOCK_CATEGORIES).map((cat) => (
+                  <button
+                    key={cat}
+                    style={{
+                      ...styles.categoryTab,
+                      ...(blockCategory === cat ? styles.categoryTabActive : {}),
+                    }}
+                    onClick={() => setBlockCategory(cat)}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+
               <div style={styles.blockGrid}>
-                {EDITABLE_BLOCKS.map((b) => (
+                {(BLOCK_CATEGORIES[blockCategory as keyof typeof BLOCK_CATEGORIES] || []).map((b) => (
                   <button
                     key={b.type}
                     style={{
@@ -257,7 +366,7 @@ function LLMConfigPanel() {
       <div style={styles.sectionTitle}>LLM 配置</div>
 
       <label style={styles.label}>提供商</label>
-      <select style={styles.select} value={provider} onChange={(e) => setProvider(e.target.value as "ollama" | "openai" | "anthropic")}>
+      <select style={styles.select} value={provider} onChange={(e) => setProvider(e.target.value as 'ollama' | 'openai' | 'anthropic')}>
         <option value="ollama">Ollama (本地)</option>
         <option value="openai">OpenAI</option>
         <option value="anthropic">Anthropic / OpenAI 兼容</option>
@@ -369,6 +478,16 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex', alignItems: 'center', gap: 10,
     padding: '16px 20px', borderBottom: '1px solid #333', color: '#c084fc',
   },
+  moodBar: {
+    display: 'flex', alignItems: 'center', gap: 6,
+    padding: '8px 20px', borderBottom: '1px solid #333',
+  },
+  moodBarInner: {
+    flex: 1, height: 4, background: '#252236', borderRadius: 2, overflow: 'hidden',
+  },
+  moodBarFill: {
+    height: '100%', borderRadius: 2, transition: 'width 0.5s ease',
+  },
   tabs: { display: 'flex', borderBottom: '1px solid #333' },
   tab: {
     flex: 1, padding: '10px 0', background: 'none', border: 'none',
@@ -402,11 +521,15 @@ const styles: Record<string, React.CSSProperties> = {
   mapList: { display: 'flex', flexDirection: 'column' as const, gap: 6 },
   mapItem: {
     padding: '10px 12px', background: '#252236', borderRadius: 8,
-    cursor: 'pointer', border: '1px solid transparent',
+    border: '1px solid transparent',
   },
   mapItemActive: { borderColor: '#6366f1', background: '#2d2a45' },
   mapName: { color: '#fff', fontSize: 14, fontWeight: 500 },
   mapMeta: { color: '#666', fontSize: 12, marginTop: 2 },
+  deleteBtn: {
+    background: 'none', border: 'none', color: '#666', cursor: 'pointer',
+    fontSize: 12, padding: '2px 6px', borderRadius: 4,
+  },
   inhabitantItem: {
     display: 'flex', alignItems: 'center', gap: 8,
     padding: '8px 12px', background: '#252236', borderRadius: 8, marginBottom: 4,
@@ -415,6 +538,27 @@ const styles: Record<string, React.CSSProperties> = {
   addBtn: {
     width: '100%', padding: '8px', background: 'none', color: '#c084fc',
     border: '1px dashed #c084fc', borderRadius: 8, cursor: 'pointer', fontSize: 13, marginTop: 8,
+  },
+  templateGrid: {
+    display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 6, marginBottom: 8,
+  },
+  templateBtn: {
+    display: 'flex', flexDirection: 'column' as const, alignItems: 'center', gap: 4,
+    padding: '10px 8px', background: '#252236', border: '2px solid #444',
+    borderRadius: 8, cursor: 'pointer',
+  },
+  templateBtnActive: {
+    borderColor: '#c084fc', background: '#2d2a45',
+  },
+  categoryTabs: {
+    display: 'flex', gap: 4, marginBottom: 10, flexWrap: 'wrap' as const,
+  },
+  categoryTab: {
+    padding: '4px 8px', background: '#252236', border: '1px solid #444',
+    borderRadius: 6, cursor: 'pointer', fontSize: 11, color: '#888',
+  },
+  categoryTabActive: {
+    background: '#6366f1', color: '#fff', borderColor: '#6366f1',
   },
   blockGrid: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 },
   blockBtn: {

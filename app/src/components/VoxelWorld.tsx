@@ -1,13 +1,15 @@
 // ============================================================
 // VoxelWorld - Three.js Minecraft-style 3D renderer
+// 增强版：粒子效果、互动系统、季节渲染
 // ============================================================
 import { useRef, useMemo, useCallback } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls, Sky, Html } from '@react-three/drei';
 import * as THREE from 'three';
-import type { MapData, Block, BlockType, Position } from '../lib/types';
-import { BLOCK_COLORS } from '../lib/types';
+import type { MapData, Block, BlockType, Position, MapMessage } from '../lib/types';
+import { BLOCK_COLORS, SEASON_COLORS } from '../lib/types';
 import { useStore } from '../lib/store';
+import { WishingFountain, LanternRelease, MemoryTree, ButterflyRelease } from './Interactions';
 
 // Instanced block renderer for performance
 function BlockMesh({ blocks, type }: { blocks: Block[]; type: BlockType }) {
@@ -44,6 +46,122 @@ function CandleLight({ position }: { position: Position }) {
     }
   });
   return <pointLight ref={ref} position={[position.x, position.y + 1.5, position.z]} color="#fde68a" intensity={1.5} distance={5} />;
+}
+
+// 粒子效果：樱花飘落
+function CherryBlossoms({ season }: { season?: string }) {
+  const particles = useRef<THREE.Points>(null);
+  const count = 50;
+
+  const positions = useMemo(() => {
+    const pos = new Float32Array(count * 3);
+    for (let i = 0; i < count; i++) {
+      pos[i * 3] = Math.random() * 32;
+      pos[i * 3 + 1] = Math.random() * 10 + 5;
+      pos[i * 3 + 2] = Math.random() * 32;
+    }
+    return pos;
+  }, []);
+
+  useFrame((_, delta) => {
+    if (!particles.current) return;
+    const pos = particles.current.geometry.attributes.position;
+    for (let i = 0; i < count; i++) {
+      pos.array[i * 3 + 1] -= delta * 0.5; // 下落
+      pos.array[i * 3] += Math.sin(Date.now() * 0.001 + i) * delta * 0.3; // 飘动
+      if (pos.array[i * 3 + 1] < 0) {
+        pos.array[i * 3 + 1] = 10 + Math.random() * 5;
+        pos.array[i * 3] = Math.random() * 32;
+        pos.array[i * 3 + 2] = Math.random() * 32;
+      }
+    }
+    pos.needsUpdate = true;
+  });
+
+  // 只在春天显示
+  if (season !== 'spring' && season !== undefined) return null;
+
+  return (
+    <points ref={particles}>
+      <bufferGeometry>
+        <bufferAttribute
+          attach="attributes-position"
+          args={[positions, 3]}
+        />
+      </bufferGeometry>
+      <pointsMaterial size={0.15} color="#f9a8d4" transparent opacity={0.8} />
+    </points>
+  );
+}
+
+// 粒子效果：萤火虫
+function Fireflies() {
+  const particles = useRef<THREE.Points>(null);
+  const count = 30;
+
+  const positions = useMemo(() => {
+    const pos = new Float32Array(count * 3);
+    for (let i = 0; i < count; i++) {
+      pos[i * 3] = Math.random() * 32;
+      pos[i * 3 + 1] = Math.random() * 3 + 1;
+      pos[i * 3 + 2] = Math.random() * 32;
+    }
+    return pos;
+  }, []);
+
+  useFrame(({ clock }) => {
+    if (!particles.current) return;
+    const pos = particles.current.geometry.attributes.position;
+    for (let i = 0; i < count; i++) {
+      pos.array[i * 3] += Math.sin(clock.elapsedTime + i * 0.5) * 0.01;
+      pos.array[i * 3 + 1] += Math.cos(clock.elapsedTime * 0.5 + i) * 0.005;
+      pos.array[i * 3 + 2] += Math.sin(clock.elapsedTime * 0.7 + i * 0.3) * 0.01;
+    }
+    pos.needsUpdate = true;
+    // 闪烁效果
+    const mat = particles.current.material as THREE.PointsMaterial;
+    mat.opacity = 0.5 + Math.sin(clock.elapsedTime * 2) * 0.3;
+  });
+
+  return (
+    <points ref={particles}>
+      <bufferGeometry>
+        <bufferAttribute
+          attach="attributes-position"
+          args={[positions, 3]}
+        />
+      </bufferGeometry>
+      <pointsMaterial size={0.1} color="#fde68a" transparent opacity={0.6} />
+    </points>
+  );
+}
+
+// 粒子效果：水面涟漪
+function WaterRipple({ positions }: { positions: Position[] }) {
+  const ref = useRef<THREE.Group>(null);
+
+  useFrame(({ clock }) => {
+    if (!ref.current) return;
+    ref.current.children.forEach((child, i) => {
+      const mesh = child as THREE.Mesh;
+      const scale = 1 + Math.sin(clock.elapsedTime * 2 + i) * 0.3;
+      mesh.scale.set(scale, 1, scale);
+      (mesh.material as THREE.MeshBasicMaterial).opacity = 0.3 - Math.sin(clock.elapsedTime * 2 + i) * 0.2;
+    });
+  });
+
+  if (positions.length === 0) return null;
+
+  return (
+    <group ref={ref}>
+      {positions.slice(0, 5).map((pos, i) => (
+        <mesh key={i} position={[pos.x, pos.y + 0.1, pos.z]} rotation={[-Math.PI / 2, 0, 0]}>
+          <ringGeometry args={[0.3, 0.5, 16]} />
+          <meshBasicMaterial color="#7dd3fc" transparent opacity={0.3} side={THREE.DoubleSide} />
+        </mesh>
+      ))}
+    </group>
+  );
 }
 
 // Inhabitant marker
@@ -149,25 +267,137 @@ function BlockLayer({ blocks }: { blocks: Block[] }) {
   );
 }
 
-// Main scene
-function Scene({ map }: { map: MapData }) {
-  const candlePositions = useMemo(
-    () => map.blocks.filter((b) => b.type === 'candle').map((b) => b.position),
-    [map.blocks]
-  );
+// 互动方块处理
+function InteractiveBlocks({ map, onMapUpdate }: { map: MapData; onMapUpdate: (map: MapData) => void }) {
+  const wishes = map.messages
+    .filter((m) => m.type === 'wish')
+    .map((m) => m.content);
+
+  const memoryTags = map.messages
+    .filter((m) => m.type === 'memory_tag')
+    .map((m) => m.content);
+
+  const handleWish = (wish: string) => {
+    const newMsg: MapMessage = {
+      id: `msg-${Date.now()}`,
+      type: 'wish',
+      content: wish,
+      createdAt: Date.now(),
+    };
+    onMapUpdate({
+      ...map,
+      messages: [...map.messages, newMsg],
+    });
+  };
+
+  const handleLantern = (message: string) => {
+    const newMsg: MapMessage = {
+      id: `msg-${Date.now()}`,
+      type: 'lantern',
+      content: message,
+      createdAt: Date.now(),
+    };
+    onMapUpdate({
+      ...map,
+      messages: [...map.messages, newMsg],
+    });
+  };
+
+  const handleMemoryTag = (tag: string) => {
+    const newMsg: MapMessage = {
+      id: `msg-${Date.now()}`,
+      type: 'memory_tag',
+      content: tag,
+      createdAt: Date.now(),
+    };
+    onMapUpdate({
+      ...map,
+      messages: [...map.messages, newMsg],
+    });
+  };
 
   return (
     <>
-      <ambientLight intensity={0.4} />
+      {/* 许愿池 */}
+      {map.blocks
+        .filter((b) => b.type === 'fountain')
+        .map((b, i) => (
+          <WishingFountain
+            key={`fountain-${i}`}
+            position={b.position}
+            wishes={wishes}
+            onWish={handleWish}
+          />
+        ))}
+
+      {/* 天灯 */}
+      {map.blocks
+        .filter((b) => b.type === 'lantern')
+        .map((b, i) => (
+          <LanternRelease
+            key={`lantern-${i}`}
+            position={b.position}
+            onRelease={handleLantern}
+          />
+        ))}
+
+      {/* 记忆树（使用 wood 方块） */}
+      {map.blocks
+        .filter((b) => b.type === 'wood' && b.metadata?.interactive)
+        .map((b, i) => (
+          <MemoryTree
+            key={`tree-${i}`}
+            position={b.position}
+            tags={memoryTags}
+            onTag={handleMemoryTag}
+          />
+        ))}
+
+      {/* 蝴蝶 */}
+      {map.blocks
+        .filter((b) => b.type === 'butterfly')
+        .map((b, i) => (
+          <ButterflyRelease key={`butterfly-${i}`} position={b.position} />
+        ))}
+    </>
+  );
+}
+
+// Main scene
+function Scene({ map, onMapUpdate }: { map: MapData; onMapUpdate: (map: MapData) => void }) {
+  const candlePositions = useMemo(
+    () => map.blocks.filter((b) => b.type === 'candle' || b.type === 'lantern').map((b) => b.position),
+    [map.blocks]
+  );
+
+  const waterPositions = useMemo(
+    () => map.blocks.filter((b) => b.type === 'water').map((b) => b.position),
+    [map.blocks]
+  );
+
+  // 季节配色
+  const seasonColors = map.season ? SEASON_COLORS[map.season] : SEASON_COLORS.spring;
+
+  return (
+    <>
+      <ambientLight intensity={seasonColors.ambient} />
       <directionalLight position={[20, 30, 10]} intensity={1} castShadow shadow-mapSize-width={2048} shadow-mapSize-height={2048} />
       <Sky sunPosition={[50, 30, 50]} />
-      <fog attach="fog" args={['#c8d6e5', 40, 80]} />
+      <fog attach="fog" args={[seasonColors.fog, 40, 80]} />
 
       <BlockLayer blocks={map.blocks} />
 
       {candlePositions.map((pos, i) => (
         <CandleLight key={i} position={pos} />
       ))}
+
+      {/* 粒子效果 */}
+      <CherryBlossoms season={map.season} />
+      <Fireflies />
+      <WaterRipple positions={waterPositions} />
+
+      {/* 互动系统 */}
+      <InteractiveBlocks map={map} onMapUpdate={onMapUpdate} />
 
       {map.inhabitants.map((inh) => (
         <InhabitantMarker key={inh.id} inhabitant={inh} />
@@ -187,6 +417,12 @@ function Scene({ map }: { map: MapData }) {
 }
 
 export function VoxelWorld({ map }: { map: MapData }) {
+  const updateMap = useStore((s) => s.updateMap);
+
+  const handleMapUpdate = useCallback((updatedMap: MapData) => {
+    updateMap(updatedMap);
+  }, [updateMap]);
+
   return (
     <Canvas
       camera={{ position: [30, 25, 30], fov: 50 }}
@@ -194,7 +430,7 @@ export function VoxelWorld({ map }: { map: MapData }) {
       style={{ width: '100%', height: '100%' }}
       gl={{ antialias: true }}
     >
-      <Scene map={map} />
+      <Scene map={map} onMapUpdate={handleMapUpdate} />
     </Canvas>
   );
 }

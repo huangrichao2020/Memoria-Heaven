@@ -1,13 +1,14 @@
 // ============================================================
 // Zustand Store - Global State Management
+// 增强版：模板选择、季节系统、删除功能
 // ============================================================
 import { create } from 'zustand';
 import type { MapData, LLMConfig, Inhabitant, BlockType } from './types';
 import type { LLMProvider } from './llm';
 import { createLLMProvider } from './llm';
 import { DigitalLifeAgent } from './agent';
-import { getAllMaps, saveMap, getLLMConfig, saveLLMConfig } from './storage';
-import { createGardenTemplate } from '../templates/garden';
+import { getAllMaps, saveMap, deleteMap as deleteMapFromDB, getLLMConfig, saveLLMConfig } from './storage';
+import { createFromTemplate } from '../templates';
 
 interface AppState {
   // Maps
@@ -32,12 +33,14 @@ interface AppState {
 
   // Actions
   init: () => Promise<void>;
-  createMap: (name: string, regionCode?: number) => Promise<MapData>;
+  createMap: (name: string, templateId?: string) => Promise<MapData>;
   selectMap: (id: string) => Promise<void>;
   updateMap: (map: MapData) => Promise<void>;
+  deleteMap: (id: string) => Promise<void>;
   addBlock: (mapId: string, block: MapData['blocks'][0]) => Promise<void>;
   removeBlock: (mapId: string, pos: { x: number; y: number; z: number }) => Promise<void>;
   addInhabitant: (mapId: string, inhabitant: Inhabitant) => Promise<void>;
+  removeInhabitant: (mapId: string, inhabitantId: string) => Promise<void>;
   setLLMConfig: (config: LLMConfig) => Promise<void>;
   setActiveAgent: (inhabitant: Inhabitant) => void;
   setEditorMode: (mode: 'view' | 'edit') => void;
@@ -66,8 +69,8 @@ export const useStore = create<AppState>((set, get) => ({
     set({ maps, llmConfig: config, llmProvider: provider, isLoading: false });
   },
 
-  createMap: async (name) => {
-    const map = createGardenTemplate(name);
+  createMap: async (name, templateId = 'garden') => {
+    const map = createFromTemplate(templateId, name);
     await saveMap(map);
     set((s) => ({ maps: [map, ...s.maps], currentMap: map }));
     return map;
@@ -85,6 +88,15 @@ export const useStore = create<AppState>((set, get) => ({
       currentMap: map,
       maps: s.maps.map((m) => (m.id === map.id ? map : m)),
     }));
+  },
+
+  deleteMap: async (id) => {
+    await deleteMapFromDB(id);
+    set((s) => {
+      const maps = s.maps.filter((m) => m.id !== id);
+      const currentMap = s.currentMap?.id === id ? null : s.currentMap;
+      return { maps, currentMap };
+    });
   },
 
   addBlock: async (mapId, block) => {
@@ -120,6 +132,17 @@ export const useStore = create<AppState>((set, get) => ({
     await get().updateMap(updated);
   },
 
+  removeInhabitant: async (mapId, inhabitantId) => {
+    const { maps } = get();
+    const map = maps.find((m) => m.id === mapId);
+    if (!map) return;
+    const updated = {
+      ...map,
+      inhabitants: map.inhabitants.filter((inh) => inh.id !== inhabitantId),
+    };
+    await get().updateMap(updated);
+  },
+
   setLLMConfig: async (config) => {
     await saveLLMConfig(config);
     const provider = createLLMProvider(config);
@@ -130,11 +153,23 @@ export const useStore = create<AppState>((set, get) => ({
     const { llmProvider, agents } = get();
     if (!llmProvider) return;
 
+    // 停止之前的脉搏
+    const prevAgent = get().activeAgent;
+    if (prevAgent) prevAgent.stopPulse();
+
     let agent = agents.get(inhabitant.id);
     if (!agent) {
       agent = new DigitalLifeAgent(inhabitant, llmProvider);
       agents.set(inhabitant.id, agent);
     }
+
+    // 启动脉搏
+    agent.startPulse(() => {
+      // 脉搏消息会自动存储在 agent 的对话历史中
+      // 触发 UI 更新
+      set({ activeAgent: get().activeAgent });
+    });
+
     set({ activeAgent: agent, chatOpen: true });
   },
 
